@@ -19,7 +19,10 @@ python3 main.py data/small -t -s -g
 ## Options
 
 *-g* draws the transducer
+
 *-s* prints summary of the size of the transducer
+
 *-t* shows elapsed time
+
 *-d* debug; draws transducer on every step of the build process
 
