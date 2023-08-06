@@ -3,7 +3,7 @@ import os
 from typing import List, Tuple
 
 from graphs import draw_transducer
-from transducer import construct
+from transducer import construct, delete_entry
 
 
 def read_file(filename: str) -> List[Tuple[str, str]]:
@@ -32,7 +32,7 @@ parser.add_argument('-g', '--graph', dest='draw_graph', action='store_true')
 args = parser.parse_args()
 
 filename = args.filename 
-# filename = "data/bbb09M"
+# filename = "data/cici"
 D = read_file(filename)
 
 time_elapsed, T, h = construct(D, debug=args.debug, path=os.path.basename(filename))
@@ -50,3 +50,16 @@ if args.draw_graph:
     draw_transducer(T, os.path.basename(filename))
     print("Drawn.")
     
+    
+from random import choice
+    
+# remove_element = choice(D)[0]
+remove_element = 'tapak'
+print(f"Removing {remove_element}")
+T, h = delete_entry(T, remove_element, h)
+
+if args.draw_graph:
+    print("\nDrawing transducer...")
+    draw_transducer(T, f"{os.path.basename(filename)}_removed")
+    print("Drawn.")
+

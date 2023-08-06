@@ -2,7 +2,7 @@ import time
 import logging
 from typing import FrozenSet, Set, Dict, Tuple, List
 
-from graphs import draw_transducer
+# from graphs import draw_transducer
 
 logger = logging.getLogger(__name__)
 logger.setLevel(3)
@@ -128,6 +128,7 @@ def reduce_except(T: Transducer, a: str, l: int, h: Dict[Signature, State]) -> T
                 del T.psi[state]                  
             
             for s in T.delta_state_to_chars[state]:
+                T.itr[T.deltaT[state, s]] -= 1
                 del T.deltaT[(state, s)]
                 del T.lambdaT[(state, s)]
                 
@@ -135,6 +136,7 @@ def reduce_except(T: Transducer, a: str, l: int, h: Dict[Signature, State]) -> T
             del T.delta_state_to_chars[state]
             
             T.deltaT[(path[p-1], a[p-1])] = h[signature]
+            T.itr[h[signature]] += 1
             
             
     # assert set(T.psi.keys()) == T.F, f"\tF: {T.F}\n\tPSI: {T.psi}"
@@ -250,7 +252,6 @@ def add_new_entry(T: Transducer, h: Dict[Signature, State], v: str, beta: str, u
         
         T.itr[t1[i+1]] += 1
         
-    # print()
         
     T.delta_state_to_chars[new_states[-1]] = []
     
@@ -283,8 +284,8 @@ def construct(D: List[Tuple[str, str]], debug: bool = False, path: str = "") -> 
             
         T, h = add_new_entry(T, h, D[i][0], D[i][1], D[i - 1][0])
         
-        if debug:
-            draw_transducer(T, f"{path}_{i}")
+        # if debug:
+        #     draw_transducer(T, f"{path}_{i}")
             
     T, h = reduce_except(T, D[-1][0], 0, h)
 
@@ -314,3 +315,123 @@ def construct_from_first_entry(a: str, b: str) -> Tuple[Transducer, Dict[Signatu
     # assert set(h.keys()) == T.Q, f"Q: {T.Q}\n\th: {h}"
 
     return Transducer(Q, s, F, deltaT, lambdaT, iota, psi, itr, delta_state_to_chars), {}
+
+
+def clone(T: Transducer, p: State, a: str, q: State) -> Tuple[Transducer, State]:    
+    new_q = State()
+    
+    T.Q.add(new_q)
+    if q in T.F:
+        T.F.add(new_q)
+        T.psi[new_q] = T.psi[q]
+        
+    T.deltaT[(p, a)] = new_q
+    T.itr[new_q] = 1
+    T.delta_state_to_chars[new_q] = []
+    
+    for s in T.delta_state_to_chars[q]:
+        T.deltaT[(new_q, s)] = T.deltaT[(q, s)]
+        T.lambdaT[(new_q, s)] = T.lambdaT[(q, s)]
+        T.itr[T.deltaT[(q, s)]] += 1
+        T.delta_state_to_chars[new_q].append(s)
+        
+    #TODO tuka neshto s lambda i psi???
+    
+    return T, new_q
+
+
+def increase_except(T: Transducer, w: str, h: Dict[Signature, State]) -> Tuple[Transducer, Dict[Signature, State]]:
+    
+    state = T.s
+    
+    k = 0
+    while k < len(w) and (state, w[k]) in T.deltaT:
+        next_state = T.deltaT[(state, w[k])]
+        
+        if T.itr[next_state] == 1:
+            state = next_state
+            del h[calc_signature(T, next_state)]
+        else:
+            T, state = clone(T, state, w[k], next_state)
+            
+        k += 1
+        
+    # for a in w:
+    #     if 
+            
+    return T, h
+
+def delete_unused_states(T: Transducer, v: str) -> Tuple[Transducer, int]:
+    t = state_seq(T.deltaT, T.s, v)
+    
+    m = len(t) - 1
+    T.F.remove(t[-1])
+    states_chars_remove = []
+        
+    prev_output = T.psi[t[-1]]
+        
+    i = 1
+    
+    q = t[-i - 1]
+    a = v[-i]
+    p = t[-i]
+    
+    iota = False
+    
+    while not (p in T.F or len(T.delta_state_to_chars[p]) > 1):   
+        q = t[-i - 1]
+        a = v[-i]
+        p = t[-i]
+        
+        T.Q.remove(p)
+        
+        T.lambdaT[(q, a)] += prev_output
+        prev_output = T.lambdaT[(q, a)]
+        
+        states_chars_remove.append((q, a))
+        T.itr[p] -= 1 
+        m -= 1
+        
+        if m == 0:
+            iota = True
+            break
+        
+        i += 1
+        
+
+        
+    for state, b in states_chars_remove:
+        T.delta_state_to_chars[state].remove(b)
+        del T.deltaT[(state, b)]
+        del T.lambdaT[(state, b)]
+        
+    if iota:
+        p = q
+        
+    import os
+    common_prefix_rest = os.path.commonprefix([T.lambdaT[p, c] for  c in T.delta_state_to_chars[p]])
+          
+    for c in T.delta_state_to_chars[p]:
+        T.lambdaT[(p, c)] = remainder_suffix(common_prefix_rest, T.lambdaT[p, c])
+
+    if m == 0:
+        T.iota = common_prefix_rest
+    else:
+        while T.lambdaT[(q, a)] == "":
+            i += 1
+            q = t[-i - 1]
+            a = v[-i]
+            
+        T.lambdaT[(q, a)] += common_prefix_rest 
+    
+    # ne raboti za iota
+      
+    return T, m
+
+
+def delete_entry(T: Transducer, v: str, h: Dict[Signature, State]) -> Tuple[Transducer, Dict[Signature, State]]:
+    T, h = increase_except(T, v, h)
+    T, m = delete_unused_states(T, v)
+    T, h = reduce_except(T, v[:m+1], 0, h)
+    
+    return T, h
