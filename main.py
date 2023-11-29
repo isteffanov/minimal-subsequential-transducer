@@ -1,65 +1,73 @@
 import argparse
+import pickle
 import os
-from typing import List, Tuple
 
-from graphs import draw_transducer
-from transducer import construct, delete_entry
-
-
-def read_file(filename: str) -> List[Tuple[str, str]]:
-    print("BEGINNING TO READ THE FILE...")
-
-    D: List[Tuple[str, str]] = []
-
-    with open(filename, "r") as f:
-        for l in f.readlines():
-            s = l.strip().split("\t", maxsplit=1)
-            x = s[0]
-            y = s[1]
-            D.append((x, y))
-
-    print("READ THE WHOLE FILE")
-
-    return D
+from utils import read_file_dictionary
+from transducer import Transducer
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('filename')
-parser.add_argument('-d', '--debug', dest='debug', action='store_true')
+# parser.add_argument('-a', '--add', dest='file_to_add', type=str, required=False)
+parser.add_argument('-r', '--remove', dest='file_to_remove', type=str, required=True)
 parser.add_argument('-t', '--time', dest='measure_time', action='store_true')
 parser.add_argument('-s', '--summary', dest='summary', action='store_true')
 parser.add_argument('-g', '--graph', dest='draw_graph', action='store_true')
+parser.add_argument('-S', '--serialize', dest='serialize', action='store_true')
+parser.add_argument('-c', '--check', dest='check', action='store_true')
+
 args = parser.parse_args()
 
 filename = args.filename 
-# filename = "data/cici"
-D = read_file(filename)
+file_to_remove = args.file_to_remove
 
-time_elapsed, T, h = construct(D, debug=args.debug, path=os.path.basename(filename))
-# T, h = construct(D)
-if args.measure_time:
-    print(f"Time elapsed: {time_elapsed}")
+
+D = read_file_dictionary(filename)
+DR = read_file_dictionary(file_to_remove)
+L = list(map(lambda x: x[0], DR))
+
+
+if os.path.exists(f'dumps/{filename}_rem_{file_to_remove}.pickle'):
+    with open(f'dumps/{filename}_rem_{file_to_remove}.pickle', 'rb') as file:
+        T = pickle.load(file)
+        
+elif os.path.exists(f'dumps/{filename}.pickle'):
+    with open(f'dumps/{filename}.pickle', 'rb') as file:
+        T = pickle.load(file)
+        
+    T.remove_lexicon_out_of_order(L)
+        
+else:
+    T = Transducer(D)
+
+    if args.serialize:
+        with open(f'dumps/{filename}.pickle', 'wb') as file:
+            pickle.dump(T, file)
+        
+    T.remove_lexicon_out_of_order(L)
     
+    if args.serialize:
+        with open(f'dumps/{filename}_rem_{file_to_remove}.pickle', 'wb') as file:
+            pickle.dump(T, file)
+        
 if args.summary:
-    print("\nSummary vvv")
+    print("Summary (GOT) vvv")
     print(f'Number of states: {len(T.Q)}')
     print(f'Number of transitions: {len(T.deltaT)}')
+    print(f'Number of final states: {len(T.F)}')
+    print()
     
-if args.draw_graph:
-    print("\nDrawing transducer...")
-    draw_transducer(T, os.path.basename(filename))
-    print("Drawn.")
-    
-    
-from random import choice
-    
-# remove_element = choice(D)[0]
-remove_element = 'tapak'
-print(f"Removing {remove_element}")
-T, h = delete_entry(T, remove_element, h)
+if args.check:
 
-if args.draw_graph:
-    print("\nDrawing transducer...")
-    draw_transducer(T, f"{os.path.basename(filename)}_removed")
-    print("Drawn.")
+    DA = sorted(list(set(D) - set(DR)))
+    TA = Transducer(DA)
 
+    if args.summary:
+        print("SHOULD GET vvv")
+        print(f'Number of states: {len(TA.Q)}')
+        print(f'Number of transitions: {len(TA.deltaT)}')
+        print(f'Number of final states: {len(TA.F)}')
+        
+    with open(f'dumps/sure.pickle', 'wb') as file:
+            pickle.dump(TA, file)
+   
